@@ -36,3 +36,7 @@ data/
 .idea/
 .DS_Store
 Thumbs.db
+
+.vercel
+
+push_to_github.bat

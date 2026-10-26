@@ -28,29 +28,37 @@ export function getDbProvider() {
  * Initialize SQLite database connection and run schema migrations.
  */
 function initSqlite(dbPath) {
-  let targetPath = dbPath || process.env.SQLITE_DB_PATH;
-  if (!targetPath) {
-    if (process.env.VERCEL) {
-      targetPath = '/tmp/hackathon.db';
-      console.warn('[DATABASE] NOTICE: Running SQLite in ephemeral /tmp on Vercel. Data will not persist across container lifecycles. Configure a managed PostgreSQL DATABASE_URL in Vercel for permanent storage.');
-    } else {
-      targetPath = path.join(__dirname, '../data/hackathon.db');
-    }
+  let targetPath;
+  if (dbPath === ':memory:') {
+    targetPath = ':memory:';
+  } else if (process.env.VERCEL) {
+    targetPath = '/tmp/hackathon.db';
+    console.warn('[DATABASE] NOTICE: Running SQLite in /tmp on Vercel.');
+  } else {
+    targetPath = dbPath || process.env.SQLITE_DB_PATH || path.join(__dirname, '../data/hackathon.db');
   }
 
   if (targetPath !== ':memory:') {
     const dir = path.dirname(targetPath);
-    if (!fs.existsSync(dir)) {
-      fs.mkdirSync(dir, { recursive: true });
+    try {
+      if (!fs.existsSync(dir)) {
+        fs.mkdirSync(dir, { recursive: true });
+      }
+    } catch (e) {
+      console.warn('[DATABASE] Directory create notice:', e.message);
     }
   }
 
   const db = new DatabaseSync(targetPath);
 
-  // WAL mode for high concurrency & performance, foreign keys enabled
+  // Journal mode and concurrency settings
   if (targetPath !== ':memory:') {
-    db.exec('PRAGMA journal_mode = WAL;');
-    db.exec('PRAGMA synchronous = NORMAL;');
+    if (process.env.VERCEL) {
+      db.exec('PRAGMA journal_mode = DELETE;');
+    } else {
+      db.exec('PRAGMA journal_mode = WAL;');
+      db.exec('PRAGMA synchronous = NORMAL;');
+    }
   }
   db.exec('PRAGMA foreign_keys = ON;');
   db.exec('PRAGMA busy_timeout = 10000;');
